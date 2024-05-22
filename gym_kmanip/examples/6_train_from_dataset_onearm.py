@@ -30,8 +30,8 @@ class Policy_Network(nn.Module):
         """
         super().__init__()
 
-        hidden_space1 = 16  # Nothing special with 16, feel free to change
-        hidden_space2 = 32  # Nothing special with 32, feel free to change
+        hidden_space1 = 64  # Nothing special with 16, feel free to change
+        hidden_space2 = 64  # Nothing special with 32, feel free to change
 
         # Shared Network
         self.shared_net = nn.Sequential(
@@ -68,7 +68,7 @@ class Policy_Network(nn.Module):
         action_stddevs = torch.log(
             1 + torch.exp(self.policy_stddev_net(shared_features))
         )
-
+        # print (action_means)
         return action_means, action_stddevs
 
 class REINFORCE:
@@ -105,24 +105,32 @@ class REINFORCE:
         """
         # print(state)
         # print(np.dstack([state]))
-        # print(np.array([state]))
-        flattened = np.array([v for v in state.values()])
+        # # print(np.array([state]))
+        # print(state)
+        # print(np.concatenate(list(state.values())))
+        flattened = np.concatenate(list(state.values()))
+        # flattenedarm = flattened[:20]
         # print(flattened)
         state = torch.tensor(flattened, dtype=torch.float64)
         action_means, action_stddevs = self.net(state)
+        # print(action_means)
 
         # create a normal distribution from the predicted
         # mean and standard deviation and sample an action
         distrib = Normal(action_means[0] + self.eps, action_stddevs[0] + self.eps)
-        action = distrib.sample()
-        prob = distrib.log_prob(action)
+        # print(distrib)
+        # action = distrib.sample()
+        actions = torch.tensor([(Normal(action_means[i] + self.eps, action_stddevs[i] + self.eps).sample()).item() for i in range(len(action_means))], dtype = torch.float64)
+        # print(actions)
+        # print(action)
+        prob = distrib.log_prob(actions)
         self.probs.append(prob)
 
-        action = action.numpy()
-        # print(action)
+        actions = actions.numpy()
+        # print(actions)
 
         keys = ["eer_pos", "eer_orn", "grip_r"]
-        vals = [action[:3:], action[3:7:], action[7:8:]]
+        vals = [actions[:3:], actions[3:7:], actions[7:8:]]
 
         actiondict = OrderedDict()
         for i in range (3):
@@ -167,8 +175,6 @@ ENV_NAME: str = "KManipSoloArm"
 env = gym.make(ENV_NAME)
 # env = gym.make("InvertedPendulum-v4")
 
-wrapped_env = gym.wrappers.RecordEpisodeStatistics(env, 50)  # Records episode-reward
-
 total_num_episodes = int(5e3)  # Total number of episodes
 # Observation-space of InvertedPendulum-v4 (4)
 # Action-space of InvertedPendulum-v4 (1)
@@ -176,7 +182,7 @@ total_num_episodes = int(5e3)  # Total number of episodes
 # obs_space_dims = env.observation_space.shape[0]
 
 # define dimensions (hyperparameter for now)
-obs_space_dims, action_space_dims = 10, 8
+obs_space_dims, action_space_dims = 27, 8
 rewards_over_seeds = []
 
 for seed in [3]:  # Fibonacci seeds
@@ -190,44 +196,56 @@ for seed in [3]:  # Fibonacci seeds
     reward_over_episodes = []
 
     for episode in range(total_num_episodes):
+        # print(episode)
         # gymnasium v26 requires users to set seed while resetting the environment
-        obs, info = wrapped_env.reset(seed=seed)
+        obs, info = env.reset(seed=seed)
 
+        # print(obs)
         done = False
+        rewards = []
+        # counter = 0
         while not done:
+            # print(counter)
+            # counter += 1
             action = agent.sample_action(obs)
-
             # Step return type - `tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]`
             # These represent the next observation, the reward from the step,
             # if the episode is terminated, if the episode is truncated and
             # additional info from the step
-            obs, reward, terminated, truncated, info = wrapped_env.step(action)
+            # wrapped_env.step(action)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            # breakpoint()
             # print(action)
             # print(obs)
             # breakpoint()
             # print(reward)
+            rewards.append(reward)
             agent.rewards.append(reward)
 
             # End the episode when either truncated or terminated is true
             #  - truncated: The episode duration reaches max number of timesteps
             #  - terminated: Any of the state space values is no longer finite.
-            done = terminated or truncated
-
-        reward_over_episodes.append(wrapped_env.return_queue[-1])
+            done = terminated or truncated 
+        # breakpoint()
+        print("Episode:", episode, "Average Reward:", np.average(rewards))
         agent.update()
 
-        if episode % 100 == 0:
-            avg_reward = np.mean(wrapped_env.return_queue)
-            print("Episode:", episode, "Average Reward:", avg_reward)
 
-    rewards_over_seeds.append(reward_over_episodes)
+    #     reward_over_episodes.append(env.return_queue[-1])
+    #     agent.update()
 
-#printing
-rewards_to_plot = [[reward[0] for reward in rewards] for rewards in rewards_over_seeds]
-df1 = pd.DataFrame(rewards_to_plot).melt()
-df1.rename(columns={"variable": "episodes", "value": "reward"}, inplace=True)
-sns.set_theme(style="darkgrid", context="talk", palette="rainbow")
-sns.lineplot(x="episodes", y="reward", data=df1).set(
-    title="REINFORCE for InvertedPendulum-v4"
-)
-plt.show()
+    #     if episode % 1 == 0:
+    #         avg_reward = np.mean(wrapped_env.return_queue)
+    #         print("Episode:", episode, "Average Reward:", avg_reward)
+
+    # rewards_over_seeds.append(reward_over_episodes)
+
+# plotting learning shape
+# rewards_to_plot = [[reward[0] for reward in rewards] for rewards in rewards_over_seeds]
+# df1 = pd.DataFrame(rewards_to_plot).melt()
+# df1.rename(columns={"variable": "episodes", "value": "reward"}, inplace=True)
+# sns.set_theme(style="darkgrid", context="talk", palette="rainbow")
+# sns.lineplot(x="episodes", y="reward", data=df1).set(
+#     title="REINFORCE for InvertedPendulum-v4"
+# )
+# plt.show()
