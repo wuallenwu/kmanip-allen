@@ -34,7 +34,7 @@
 </table>
 
 
-## Installation
+## Setup - Linux
 
 clone and install dependencies
 
@@ -49,6 +49,16 @@ run tests
 ```bash
 pip install pytest
 pytest tests/test_env.py
+```
+
+## Setup - Jetson Orin AGX
+
+no conda on arm64, just install on bare metal
+
+```bash
+sudo apt-get install libhdf5-dev
+git clone https://github.com/kscalelabs/gym-kmanip.git && cd gym-kmanip
+pip install -e .
 ```
 
 ## Usage - Basic
@@ -97,6 +107,17 @@ data is visualized using rerun
 
 ```bash
 rerun gym_kmanip/data/test.rrd
+```
+
+## Usage - MuJoCo Sim Visualizer
+
+mujoco provides a nice visualizer where you can directly control the robot
+
+[download standalone mujoco](https://github.com/google-deepmind/mujoco/releases)
+
+```
+tar -xzf ~/Downloads/mujoco-3.1.5-linux-x86_64.tar.gz -C /path/to/mujoco-3.1.5
+/path/to/mujoco-3.1.5/bin/simulate gym_kmanip/assets/_env_solo_arm.xml
 ```
 
 ## Help Wanted
