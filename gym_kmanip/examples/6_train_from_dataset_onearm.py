@@ -2,6 +2,7 @@
 
 from collections import OrderedDict
 import random
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,8 +31,8 @@ class Policy_Network(nn.Module):
         """
         super().__init__()
 
-        hidden_space1 = 64  # Nothing special with 16, feel free to change
-        hidden_space2 = 64  # Nothing special with 32, feel free to change
+        hidden_space1 = 16  # Nothing special with 16, feel free to change
+        hidden_space2 = 16  # Nothing special with 32, feel free to change
 
         # Shared Network
         self.shared_net = nn.Sequential(
@@ -196,6 +197,7 @@ for seed in [3]:  # Fibonacci seeds
     reward_over_episodes = []
 
     for episode in range(total_num_episodes):
+        start_time = time.time()
         # print(episode)
         # gymnasium v26 requires users to set seed while resetting the environment
         obs, info = env.reset(seed=seed)
@@ -228,6 +230,7 @@ for seed in [3]:  # Fibonacci seeds
             done = terminated or truncated 
         # breakpoint()
         print("Episode:", episode, "Average Reward:", np.average(rewards))
+        print(time.time() - start_time)
         agent.update()
 
 
