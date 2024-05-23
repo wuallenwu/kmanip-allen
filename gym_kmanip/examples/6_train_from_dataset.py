@@ -170,6 +170,7 @@ class REINFORCE:
 ENV_NAME: str = "KManipSoloArm"
 # ENV_NAME: str = "KManipSoloArmVision"
 # ENV_NAME: str = "KManipDualArm"
+# ENV_NAME: str = "KManipDualArmQPos"
 # ENV_NAME: str = "KManipDualArmVision"
 # ENV_NAME: str = "KManipTorso"
 # ENV_NAME: str = "KManipTorsoVision"

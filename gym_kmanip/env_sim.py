@@ -7,6 +7,7 @@ from dm_control.suite import base
 from dm_control.rl import control
 import numpy as np
 from numpy.typing import NDArray
+from scipy.spatial.transform import Rotation as R
 
 import gym_kmanip as k
 from gym_kmanip.env_base import KManipEnv
@@ -23,6 +24,9 @@ class KManipTask(base.Task):
         physics.reset()
         # TODO: jitter starting joint angles
         np.copyto(physics.data.qpos[: self.gym_env.q_len], self.gym_env.q_pos_home)
+        np.copyto(physics.data.ctrl[: self.gym_env.q_len], self.gym_env.q_pos_home)
+        # TODO: random start velocity
+        np.copyto(physics.data.qvel[: self.gym_env.q_len], np.zeros(self.gym_env.q_len))
         # randomize cube spawn
         box_start_idx = physics.model.name2id("cube_joint", "joint")
         np.copyto(
@@ -32,24 +36,34 @@ class KManipTask(base.Task):
         super().initialize_episode(physics)
 
     def before_step(self, action, physics):
-        q_pos: NDArray = physics.data.qpos[:].copy()
+        q_pos: NDArray = physics.data.qpos.copy()
         ctrl: NDArray = physics.data.ctrl.copy().astype(k.ACT_DTYPE)
         if "grip_r" in action:
-            grip_slider_r = k.EE_S_MIN + action["grip_r"] * k.EE_S_RANGE
-            ctrl[self.gym_env.ctrl_id_r_grip[0]] = grip_slider_r
-            ctrl[self.gym_env.ctrl_id_r_grip[1]] = grip_slider_r
+            # grip action will be [-1, 1], need to undo that here
+            grip_r: float = action["grip_r"] * k.EE_S_DELTA
+            grip_r += physics.data.qpos[self.gym_env.ctrl_id_r_grip[0]]
+            # clip to range
+            grip_r = np.clip(grip_r, k.EE_S_MIN, k.EE_S_MAX)
+            ctrl[self.gym_env.ctrl_id_r_grip[0]] = grip_r
+            ctrl[self.gym_env.ctrl_id_r_grip[1]] = grip_r
         if "grip_l" in action:
-            grip_slider_l = k.EE_S_MIN + action["grip_l"] * k.EE_S_RANGE
-            ctrl[self.gym_env.ctrl_id_l_grip[0]] = grip_slider_l
-            ctrl[self.gym_env.ctrl_id_l_grip[1]] = grip_slider_l
+            # grip action will be [-1, 1], need to undo that here
+            grip_l: float = action["grip_l"] * k.EE_S_DELTA
+            grip_l += physics.data.qpos[self.gym_env.ctrl_id_l_grip[0]]
+            # clip to range
+            grip_l = np.clip(grip_l, k.EE_S_MIN, k.EE_S_MAX)
+            ctrl[self.gym_env.ctrl_id_l_grip[0]] = grip_l
+            ctrl[self.gym_env.ctrl_id_l_grip[1]] = grip_l
         if "eer_pos" in action:
             # ee_pos will be normalized to [-1, 1], need to undo that here
-            eer_pos: NDArray = action["eer_pos"] * k.EE_POS_RANGE
+            eer_pos: NDArray = action["eer_pos"] * k.EE_POS_DELTA
             eer_pos += physics.data.site("eer_site_pos").xpos
-            # ee_orn will be [-1, 1], potentially invalid quaternion, need to normalize
-            eer_orn: NDArray = action["eer_orn"]
-            eer_orn /= np.linalg.norm(eer_orn) + k.Q_NORM_EPS
             np.copyto(physics.data.mocap_pos[k.MOCAP_ID_R], eer_pos)
+            # ee_orn will be [-1, 1] in euler angles, need to add to current orientation
+            eer_orn: NDArray = action["eer_orn"] * k.EE_ORN_DELTA
+            eer_orn += R.from_matrix(physics.data.site("eer_site_pos").xmat.reshape(3, 3)).as_euler("xyz")
+            # TODO: clip to ee orn limits
+            eer_orn = R.from_euler("xyz", eer_orn).as_quat()[k.XYZW_2_WXYZ]
             np.copyto(physics.data.mocap_quat[k.MOCAP_ID_R], eer_orn)
             ctrl[self.gym_env.q_id_r_mask] = ik(
                 physics,
@@ -58,17 +72,18 @@ class KManipTask(base.Task):
                 ee_site="eer_site_pos",
                 q_mask=self.gym_env.q_id_r_mask,
                 q_pos_home=self.gym_env.q_pos_home,
-                q_pos_prev=self.gym_env.q_pos_prev,
+                q_pos_prev=q_pos,
             )
-            self.gym_env.q_pos_prev = q_pos
         if "eel_pos" in action:
             # pos will be normalized to [-1, 1], need to undo that here
-            eel_pos: NDArray = action["eel_pos"] * k.EE_POS_RANGE
+            eel_pos: NDArray = action["eel_pos"] * k.EE_POS_DELTA
             eel_pos += physics.data.site("eel_site_pos").xpos
-            # orn will be [-1, 1], potentially invalid quaternion, need to normalize
-            eel_orn: NDArray = action["eel_orn"]
-            eel_orn /= np.linalg.norm(eel_orn) + k.Q_NORM_EPS
             np.copyto(physics.data.mocap_pos[k.MOCAP_ID_L], eel_pos)
+            # orn will be [-1, 1], potentially invalid quaternion, need to normalize
+            eel_orn: NDArray = action["eel_orn"] * k.EE_ORN_DELTA
+            eel_orn += R.from_matrix(physics.data.site("eel_site_pos").xmat.reshape(3, 3)).as_euler("xyz")
+            # TODO: clip to ee orn limits
+            eel_orn = R.from_euler("xyz", eel_orn).as_quat()[k.XYZW_2_WXYZ]
             np.copyto(physics.data.mocap_quat[k.MOCAP_ID_L], eel_orn)
             ctrl[self.gym_env.q_id_l_mask] = ik(
                 physics,
@@ -77,11 +92,12 @@ class KManipTask(base.Task):
                 ee_site="eel_site_pos",
                 q_mask=self.gym_env.q_id_l_mask,
                 q_pos_home=self.gym_env.q_pos_home,
-                q_pos_prev=self.gym_env.q_pos_prev,
+                q_pos_prev=q_pos,
             )
-            self.gym_env.q_pos_prev = q_pos
-        if "q_pos" in action:
-            ctrl[:] = action["q_pos"]
+        if "q_pos_r" in action:
+            ctrl[self.gym_env.q_id_r_mask] = q_pos[self.gym_env.q_id_r_mask] + action["q_pos_r"] * k.Q_POS_DELTA
+        if "q_pos_l" in action:
+            ctrl[self.gym_env.q_id_l_mask] = q_pos[self.gym_env.q_id_l_mask] + action["q_pos_l"] * k.Q_POS_DELTA
         # exponential filter for smooth control
         ctrl = k.CTRL_ALPHA * ctrl + (1 - k.CTRL_ALPHA) * physics.data.ctrl
         super().before_step(ctrl, physics)
@@ -133,11 +149,11 @@ class KManipTask(base.Task):
         if "grip_l" in self.gym_env.act_list:
             grip_pos_l = physics.named.data.xpos["eel_site"]
             dist_l = np.linalg.norm(cube_pos - grip_pos_l)
-            reward += k.REWARD_GRIP_DIST * (1 / (dist_l + 1e-6))
+            reward += k.REWARD_GRIP_DIST * (1 / (dist_l + k.EPSILON))
         if "grip_r" in self.gym_env.act_list:
             grip_pos_r = physics.named.data.xpos["eer_site"]
             dist_r = np.linalg.norm(cube_pos - grip_pos_r)
-            reward += k.REWARD_GRIP_DIST * (1 / (dist_r + 1e-6))
+            reward += k.REWARD_GRIP_DIST * (1 / (dist_r + k.EPSILON))
         # contact detection for cube, hands, table
         touch_grip_l: bool = False
         touch_grip_r: bool = False
