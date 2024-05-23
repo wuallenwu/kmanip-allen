@@ -6,31 +6,32 @@ import gym_kmanip as k
 from scipy.spatial.transform import Rotation as R
 
 # choose your environment
-# ENV_NAME: str = "KManipSoloArm"
+ENV_NAME: str = "KManipSoloArm"
 # ENV_NAME: str = "KManipSoloArmQPos"
 # ENV_NAME: str = "KManipSoloArmVision"
-ENV_NAME: str = "KManipDualArm"
+# ENV_NAME: str = "KManipDualArm"
 # ENV_NAME: str = "KManipDualArmVision"
 # ENV_NAME: str = "KManipTorso"
 # ENV_NAME: str = "KManipTorsoVision"
 env = gym.make(ENV_NAME)
+env.reset()
 # start pos for reach targets
-pos_r = env.unwrapped.mj_env.physics.data.mocap_pos[k.MOCAP_ID_R].copy()
+pos_r = env.unwrapped.env.physics.data.mocap_pos[k.MOCAP_ID_R].copy()
 if "Solo" not in ENV_NAME:
-    pos_l = env.unwrapped.mj_env.physics.data.mocap_pos[k.MOCAP_ID_L].copy()
+    pos_l = env.unwrapped.env.physics.data.mocap_pos[k.MOCAP_ID_L].copy()
 
 # TODO: try larger amplitudes, get a sense of the arm range
 AMPLITUDE_X = 0.08
 AMPLITUDE_Y = 0.08
 AMPLITUDE_Z = 0.04
-PERIOD = 0.25 * math.pi
+PERIOD = 0.1
 X_ANGLE_AMPLITUDE = 0.4  # radians
 Y_ANGLE_AMPLITUDE = 0.4  # radians
 Z_ANGLE_AMPLITUDE = 0.6  # radians
 
 def policy(ts):
     action = env.action_space.sample()
-    sim_time = env.unwrapped.mj_env.physics.data.time
+    sim_time = env.unwrapped.env.physics.data.time
     if "eer_pos" in action:
         action["eer_pos"] = np.array(
             [
@@ -45,7 +46,7 @@ def policy(ts):
         angle_z = Z_ANGLE_AMPLITUDE * math.sin(sim_time * PERIOD)
         rotation_quat = R.from_euler('xyz', [angle_x, angle_y, angle_z]).as_quat()
         action["eer_orn"] = rotation_quat
-        action["grip_r"] = math.sin(sim_time * PERIOD)
+        action["grip_r"] = 0.0 #math.sin(sim_time * PERIOD)
     if "eel_pos" in action:
         action["eel_pos"] = np.array(
             [
@@ -60,8 +61,8 @@ def policy(ts):
         angle_z = Z_ANGLE_AMPLITUDE * math.sin(sim_time * PERIOD)
         rotation_quat = R.from_euler('xyz', [angle_x, angle_y, angle_z]).as_quat()
         action["eel_orn"] = rotation_quat
-        action["grip_l"] = math.sin(sim_time * PERIOD)
+        action["grip_l"] = 0.0 #math.sin(sim_time * PERIOD)
 
     return action
 
-viewer.launch(env.unwrapped.mj_env, policy=policy)
+viewer.launch(env.unwrapped.env, policy=policy)
