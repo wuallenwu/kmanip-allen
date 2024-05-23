@@ -1,7 +1,7 @@
-from collections import OrderedDict
+from collections import OrderedDict as ODict
 from dataclasses import dataclass
 import os
-from typing import List, Tuple
+from typing import List, OrderedDict, Tuple
 
 from gymnasium.envs.registration import register
 import numpy as np
@@ -25,10 +25,20 @@ DUAL_ARM_URDF: str = "stompy_dual_arm_tiny_glb.urdf"
 TORSO_URDF: str = "stompy_tiny_glb/robot.urdf"
 
 # Misc
-FPS: int = 30
 MAX_EPISODE_STEPS: int = 64
+FPS: int = 30
 CONTROL_TIMESTEP: float = 0.02  # ms
 MAX_Q_VEL: float = np.pi  # rad/s
+
+# exponential filtering for control signal
+CTRL_ALPHA: float = 0.1
+
+# IK hyperparameters
+IK_RES_RAD: float = 0.02
+IK_RES_REG_PREV: float = 6e-3
+IK_RES_REG_HOME: float = 2e-6
+IK_JAC_RAD: float = 0.02
+IK_JAC_REG: float = 9e-3
 
 # Datasets are stored in HDF5 format on HuggingFace's LeRobot
 H5PY_CHUNK_SIZE_BYTES: int = 1024**2 * 2
@@ -40,7 +50,7 @@ HF_LEROBOT_NUM_WORKERS: int = 8
 OBS_DTYPE: np.dtype = np.float64
 ACT_DTYPE: np.dtype = np.float32
 
-Q_SOLO_ARM_HOME_DICT: OrderedDict[str, float] = OrderedDict()
+Q_SOLO_ARM_HOME_DICT: OrderedDict[str, float] = ODict()
 Q_SOLO_ARM_HOME_DICT["joint_right_arm_1_x8_1_dof_x8"] = 0.0
 Q_SOLO_ARM_HOME_DICT["joint_right_arm_1_x8_2_dof_x8"] = 0.75
 Q_SOLO_ARM_HOME_DICT["joint_right_arm_1_x6_1_dof_x6"] = 1.0
@@ -57,7 +67,7 @@ Q_SOLO_ARM_HOME: NDArray = np.array(
 )
 Q_SOLO_ARM_KEYS: List[str] = list(Q_SOLO_ARM_HOME_DICT.keys())
 
-Q_DUAL_ARM_HOME_DICT: OrderedDict[str, float] = OrderedDict()
+Q_DUAL_ARM_HOME_DICT: OrderedDict[str, float] = ODict()
 Q_DUAL_ARM_HOME_DICT["joint_right_arm_1_x8_1_dof_x8"] = 0.0
 Q_DUAL_ARM_HOME_DICT["joint_right_arm_1_x8_2_dof_x8"] = 0.75
 Q_DUAL_ARM_HOME_DICT["joint_right_arm_1_x6_1_dof_x6"] = 1.0
@@ -84,7 +94,7 @@ Q_DUAL_ARM_HOME: NDArray = np.array(
 )
 Q_DUAL_ARM_KEYS: List[str] = list(Q_DUAL_ARM_HOME_DICT.keys())
 
-Q_TORSO_HOME_DICT: OrderedDict[str, float] = OrderedDict()
+Q_TORSO_HOME_DICT: OrderedDict[str, float] = ODict()
 Q_TORSO_HOME_DICT["joint_head_1_x4_1_dof_x4"] = -1.0
 Q_TORSO_HOME_DICT["joint_head_1_x4_2_dof_x4"] = 0.0
 Q_TORSO_HOME_DICT["joint_right_arm_1_x8_1_dof_x8"] = 1.7
@@ -127,15 +137,6 @@ CTRL_ID_L_GRIP_TORSO: NDArray = np.array([17, 18])
 MOCAP_ID_R: int = 0
 MOCAP_ID_L: int = 1
 
-# IK hyperparameters
-# TODO: more tuning
-IK_RES_RAD: float = 0.02
-IK_RES_REG_PREV: float = 6e-3
-IK_RES_REG_HOME: float = 2e-6
-IK_JAC_RAD: float = 0.02
-IK_JAC_REG: float = 9e-3
-IK_MAX_VEL: float = 2.0
-
 
 @dataclass
 class Cam:
@@ -151,23 +152,27 @@ class Cam:
     dtype = np.uint8
 
 
-CAMERAS: OrderedDict[str, Cam] = OrderedDict()
+CAMERAS: OrderedDict[str, Cam] = ODict()
 CAMERAS["head"] = Cam(640, 480, 3, 448, (320, 240), "head", "camera/head")
 CAMERAS["top"] = Cam(640, 480, 3, 448, (320, 240), "top", "camera/top")
 CAMERAS["grip_r"] = Cam(60, 40, 3, 45, (30, 20), "grip_r", "camera/grip_r")
 CAMERAS["grip_l"] = Cam(60, 40, 3, 45, (30, 20), "grip_l", "camera/grip_l")
 
 # cube is randomly spawned on episode start
-CUBE_SPAWN_RANGE_X: Tuple[float] = [0.1, 0.3]
-CUBE_SPAWN_RANGE_Y: Tuple[float] = [0.5, 0.7]
-CUBE_SPAWN_RANGE_Z: Tuple[float] = [0.6, 0.7]
+CUBE_SPAWN_RANGE: NDArray = np.array(
+    [
+        [0.1, 0.3],  # X
+        [0.5, 0.7],  # Y
+        [0.6, 0.7],  # Z
+    ]
+)
 
-# reward shaping
-REWARD_SUCCESS_THRESHOLD: float = 2.0
-REWARD_VEL_PENALTY: float = 0.01
-REWARD_GRIP_DIST: float = 0.01
-REWARD_TOUCH_CUBE: float = 1.0
-REWARD_LIFT_CUBE: float = 1.0
+# ee control will expect values in range [-1, 1]
+# this will define a small "box" around the current pos for the ee
+EE_POS_RANGE: float = 0.01  # meters
+
+# when normalizing quaternions, we need to ensure they are not zero
+Q_NORM_EPS: float = 1e-6
 
 # pre-compute gripper "slider" ranges for faster callback
 EE_S_MIN: float = 0.0
@@ -175,8 +180,12 @@ EE_S_MAX: float = -0.034
 EE_S_RANGE: float = EE_S_MAX - EE_S_MIN
 EE_DEFAULT_ORN: NDArray = np.array([1, 0, 0, 0])
 
-# exponential filtering for control signal
-CTRL_ALPHA: float = 0.2
+# reward shaping
+REWARD_SUCCESS_THRESHOLD: float = 2.0
+REWARD_VEL_PENALTY: float = 0.01
+REWARD_GRIP_DIST: float = 0.01
+REWARD_TOUCH_CUBE: float = 1.0
+REWARD_LIFT_CUBE: float = 1.0
 
 # MuJoCo and Scipy/Rerun use different quaternion conventions
 # https://github.com/clemense/quaternion-conventions
@@ -208,7 +217,7 @@ def vuer2mj_orn(orn: R) -> NDArray:
 
 register(
     id="KManipSoloArm",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
@@ -235,7 +244,7 @@ register(
 
 register(
     id="KManipSoloArmQPos",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
@@ -262,7 +271,7 @@ register(
 
 register(
     id="KManipSoloArmVision",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
@@ -289,7 +298,7 @@ register(
 
 register(
     id="KManipDualArm",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
@@ -321,7 +330,7 @@ register(
 
 register(
     id="KManipDualArmVision",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
@@ -354,7 +363,7 @@ register(
 
 register(
     id="KManipTorso",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
@@ -386,7 +395,7 @@ register(
 
 register(
     id="KManipTorsoVision",
-    entry_point="gym_kmanip.env:KManipEnv",
+    entry_point="gym_kmanip.env_base:KManipEnv",
     max_episode_steps=MAX_EPISODE_STEPS,
     nondeterministic=True,
     kwargs={
