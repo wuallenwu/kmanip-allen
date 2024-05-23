@@ -21,9 +21,8 @@ ENV_NAME: str = "KManipSoloArmQPos"
 # ENV_NAME: str = "KManipTorso"
 # ENV_NAME: str = "KManipTorsoVision"
 env = gym.make(ENV_NAME)
-# env = gym.make("InvertedPendulum-v4")
 
-total_num_episodes = int(5e3)  # Total number of episodes
+total_num_episodes = int(5e4)  # Total number of episodes
 obs_space_dims, action_space_dims = 23, 11 #23 observation space dims since we don't care about cube orientation
 
 plt.rcParams["figure.figsize"] = (10, 5)
@@ -42,8 +41,8 @@ class Policy_Network(nn.Module):
         """
         super().__init__()
 
-        hidden_space1 = 32  # Nothing special with 16, feel free to change
-        hidden_space2 = 32  # Nothing special with 32, feel free to change
+        hidden_space1 = 16  
+        hidden_space2 = 16  
 
         # Shared Network
         self.shared_net = nn.Sequential(
@@ -148,14 +147,22 @@ class REINFORCE:
             gs.insert(0, running_g)
 
         deltas = torch.tensor(gs)
+        # print(deltas[0])
 
         loss = 0
         # minimize -1 * prob * reward obtained
         for log_prob, delta in zip(self.probs, deltas, strict = True):
-            loss += log_prob.mean() * delta * (-30)
+            loss += log_prob * delta * (-1)
+        # print(loss)
         # Update the policy network
         self.optimizer.zero_grad()
         loss.backward()
+        # for name, param in self.net.named_parameters():
+          
+        # print('Grad Sum', torch.sum([torch.norm(param.grad) ])
+        nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
+        
+
         self.optimizer.step()
 
         # Empty / zero out all episode-centric/related variables
@@ -178,9 +185,12 @@ for seed in [0]:
         start_time = time.time()
         # gymnasium v26 requires users to set seed while resetting the environment
         obs, _ = env.reset(seed=seed)
+        # print(obs)
+        # print(env.observation_space)
+        # breakpoint()
         done = False
         rewards = []
-
+        
         while not done:
             action = agent.sample_action(obs)
             # Step return type - `tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]`
@@ -188,6 +198,7 @@ for seed in [0]:
             # if the episode is terminated, if the episode is truncated and
             # additional info from the step
             obs, reward, terminated, truncated, _ = env.step(action)
+
             rewards.append(reward)
             agent.rewards.append(reward)
 
@@ -195,12 +206,11 @@ for seed in [0]:
             #  - truncated: The episode duration reaches max number of timesteps
             #  - terminated: Any of the state space values is no longer finite.
             done = terminated or truncated 
-            agent.update()
+        agent.update()
         reward_over_episodes.append(np.average(rewards))
         if episode % 100 == 0:
             print("Episode:", episode, "Average Reward:", np.average(rewards))
 
-print(len(reward_over_episodes))
 #display learning over episodes
 xs = [x for x in range(len(reward_over_episodes))]
 plt.plot(xs, reward_over_episodes)

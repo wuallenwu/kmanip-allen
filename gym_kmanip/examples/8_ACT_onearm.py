@@ -2,6 +2,7 @@
 from collections import OrderedDict
 import random
 
+from transformer 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -35,7 +36,7 @@ class Transformer:
   def encoder
 
 #create and run policy
-agent = REINFORCE(obs_dims, act_dims)
+agent = policy(obs_dims, act_dims)
 episode_rewards = []
 for episode in range(total_num_episodes):
   obs, _ = env.reset(seed = 0)

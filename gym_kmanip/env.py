@@ -42,6 +42,7 @@ class KManipTask(base.Task):
     def before_step(self, action, physics):
         q_pos: NDArray = physics.data.qpos[:].copy()
         ctrl: NDArray = physics.data.ctrl.copy().astype(k.ACT_DTYPE)
+        # print(action)
         if "eer_pos" in action:
             np.copyto(physics.data.mocap_pos[k.MOCAP_ID_R], action["eer_pos"])
         if "eer_orn" in action:
@@ -133,8 +134,10 @@ class KManipTask(base.Task):
             a = physics.model.id2name(physics.data.contact[i].geom1, "geom")
             b = physics.model.id2name(physics.data.contact[i].geom2, "geom")
             if a == "cube" and b == "left_gripper_finger":
+                print("HIHIHIHIHIHIHIHIHIHI")
                 touch_grip_l = True
             if a == "cube" and b == "right_gripper_finger":
+                print("HIHIHIHIHIHIHIHIHIHI")
                 touch_grip_r = True
             if a == "cube" and b == "table":
                 touch_table = True
@@ -357,6 +360,7 @@ class KManipEnv(gym.Env):
         return ts.observation, self.info
 
     def step(self, action):
+        # print(action)
         ts: TimeStep = self.mj_env.step(action)
         self.step_idx += 1
         self.info["step"] = self.step_idx

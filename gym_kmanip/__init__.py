@@ -163,10 +163,17 @@ CUBE_SPAWN_RANGE_Y: Tuple[float] = [0.5, 0.7]
 CUBE_SPAWN_RANGE_Z: Tuple[float] = [0.6, 0.7]
 
 # reward shaping
+# REWARD_SUCCESS_THRESHOLD: float = 2.0
+# REWARD_VEL_PENALTY: float = 0.01
+# REWARD_GRIP_DIST: float = 0.01
+# REWARD_TOUCH_CUBE: float = 1.0
+# REWARD_LIFT_CUBE: float = 1.0
+
+# reward shaping for onearm touching block
 REWARD_SUCCESS_THRESHOLD: float = 2.0
-REWARD_VEL_PENALTY: float = 0.01
-REWARD_GRIP_DIST: float = 0.01
-REWARD_TOUCH_CUBE: float = 1.0
+REWARD_VEL_PENALTY: float = 0.00
+REWARD_GRIP_DIST: float = 0.1
+REWARD_TOUCH_CUBE: float = 1e9
 REWARD_LIFT_CUBE: float = 1.0
 
 # pre-compute gripper "slider" ranges for faster callback

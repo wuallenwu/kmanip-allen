@@ -24,13 +24,7 @@ env = gym.make(ENV_NAME)
 # env = gym.make("InvertedPendulum-v4")
 
 total_num_episodes = int(5e3)  # Total number of episodes
-# Observation-space of InvertedPendulum-v4 (4)
-# Action-space of InvertedPendulum-v4 (1)
-# action_space_dims = env.action_space.shape[0]
-# obs_space_dims = env.observation_space.shape[0]
-
-# define dimensions (hyperparameter for now)
-obs_space_dims, action_space_dims = 27, 11
+obs_space_dims, action_space_dims = 23, 11
 
 plt.rcParams["figure.figsize"] = (10, 5)
 torch.set_printoptions(precision=8) 
@@ -49,7 +43,7 @@ class Policy_Network(nn.Module):
         """
         super().__init__()
 
-        hidden_space1 = 16  # Nothing special with 16, feel free to change
+        hidden_space1 = 32  # Nothing special with 16, feel free to change
         hidden_space2 = 32  # Nothing special with 32, feel free to change
 
         # Shared Network
@@ -103,9 +97,9 @@ class REINFORCE:
         """
 
         # Hyperparameters
-        self.learning_rate = 1e-2  # Learning rate for policy optimization
+        self.learning_rate = 1e-4  # Learning rate for policy optimization
         self.gamma = 0.99  # Discount factor
-        self.eps = 1e-9   # small number for mathematical stability
+        self.eps = 1e-6   # small number for mathematical stability
 
         self.probs = []  # Stores probability values of the sampled action
         self.rewards = []  # Stores the corresponding rewards
@@ -128,7 +122,7 @@ class REINFORCE:
         # print(state)
         # print(np.concatenate(list(state.values())))
         flattened = np.concatenate(list(state.values()))
-        # flattenedarm = flattened[:20]
+        flattened = flattened[:23]
         # print(flattened)
         state = torch.tensor(flattened, dtype=torch.float64)
         action_means, action_stddevs = self.net(state)
@@ -142,21 +136,24 @@ class REINFORCE:
         # print(distrib)
         # action = distrib.sample()
         actions = [(distrib.sample()) for distrib in distribs]
-        probs = ([distribs[i].log_prob(actions[i]) for i in range(len(distribs))])
-        print(probs)
-        breakpoint()
-        # print(log_prob)
+        log_probs = [distribs[i].log_prob(actions[i]) for i in range(len(distribs))]
+        log_prob_sum = torch.sum(torch.stack(log_probs))
+        # print(probs)
+        # print(loss)
         # breakpoint()
-        log_prob = 0
-        for i in range(len(distribs)):
-            prob = distribs[i].log_prob(actions[i])
-            log_prob += prob.item()
+        # # print(log_prob)
+        # # breakpoint()
+        # log_prob = 0
+        # for i in range(len(distribs)):
+        #     prob = distribs[i].log_prob(actions[i])
+        #     log_prob += prob.item()
+        # log_prob = torch.sum
         # print(actions)
         # breakpoint()
         actions = torch.tensor([(distrib.sample()).item() for distrib in distribs], dtype = torch.float64)
         # print(actions)
         # breakpoint()
-        self.probs.append(torch.tensor(log_prob))
+        self.probs.append(log_prob_sum)
         # print(actions)
         actions = actions.numpy()
         # print(actions)
@@ -185,13 +182,20 @@ class REINFORCE:
 
         loss = 0
         # minimize -1 * prob * reward obtained
-        for log_prob, reward in zip(self.probs, gs):
-            loss += log_prob * reward * (-1)
-
+        # print(self.probs)
+        # print(len(self.probs))
+        # breakpoint()
+        for log_prob, delta in zip(self.probs, deltas, strict = True):
+            loss += log_prob.mean() * delta * (-1)
+        # print(loss)
+        # log_probs = torch.stack(self.probs)
+        # loss = torch.mean(log_probs) * (sum(self.rewards))
         # Update the policy network
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        # print("updating")
+        # print(self.net)
 
         # Empty / zero out all episode-centric/related variables
         self.probs = []
@@ -199,7 +203,7 @@ class REINFORCE:
 
 rewards_over_seeds = []
 
-for seed in [3]:  # Fibonacci seeds
+for seed in [0]:  # Fibonacci seeds
     # set seed
     torch.manual_seed(seed)
     random.seed(seed)
@@ -214,6 +218,9 @@ for seed in [3]:  # Fibonacci seeds
         # print(episode)
         # gymnasium v26 requires users to set seed while resetting the environment
         obs, _ = env.reset(seed=seed)
+        # print(obs)
+        # breakpoint()
+        # print(env.observation_space)
 
         # print(obs)
         done = False
@@ -241,11 +248,11 @@ for seed in [3]:  # Fibonacci seeds
             #  - truncated: The episode duration reaches max number of timesteps
             #  - terminated: Any of the state space values is no longer finite.
             done = terminated or truncated 
-        # breakpoint()
+            agent.update()
+        reward_over_episodes.append(np.average(rewards))
         if episode % 100 == 0:
             print("Episode:", episode, "Average Reward:", np.average(rewards))
         # print("Time Elapsed:", time.time() - start_time)
-        agent.update()
 
 
     #     reward_over_episodes.append(env.return_queue[-1])
@@ -257,13 +264,15 @@ for seed in [3]:  # Fibonacci seeds
 
     # rewards_over_seeds.append(reward_over_episodes)
 
-# plotting learning shape
+# plotting learning trajectory
+# print(rewards)
+print(len(reward_over_episodes))
 average_reward = [np.mean(rewards[i:i+50]) for i in range(0,len(rewards),50)]
 
 #display learning over episodes
 # print(average_reward)
-xs = [x for x in range(len(average_reward))]
-plt.plot(xs, average_reward)
+xs = [x for x in range(len(reward_over_episodes))]
+plt.plot(xs, reward_over_episodes)
 plt.show()
 
 # rewards_to_plot = [[reward[0] for reward in rewards] for rewards in rewards_over_seeds]

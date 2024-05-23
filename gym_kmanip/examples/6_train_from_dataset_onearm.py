@@ -124,7 +124,10 @@ class REINFORCE:
         actions = torch.tensor([(Normal(action_means[i] + self.eps, action_stddevs[i] + self.eps).sample()).item() for i in range(len(action_means))], dtype = torch.float64)
         # print(actions)
         # print(action)
+        print(actions)
         prob = distrib.log_prob(actions)
+        print(prob)
+        breakpoint()
         self.probs.append(prob)
 
         actions = actions.numpy()

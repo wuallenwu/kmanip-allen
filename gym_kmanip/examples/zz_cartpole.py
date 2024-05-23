@@ -8,7 +8,6 @@ import torch.nn as nn
 import gymnasium as gym
 env = gym.make('CartPole-v1')
 
-loss_fn = nn.CrossEntropyLoss()
 class policy_net(nn.Module):
   def __init__(self, obs_dims : int, act_dims : int):
     super().__init__()
@@ -51,6 +50,8 @@ class REINFORCE:
     # print(probs)
     action = torch.multinomial(probs, 1).item()
     log_prob = torch.log(probs[:, action])
+    print(log_prob)
+    # breakpoint()
     self.probs.append(log_prob)
     return action
   
@@ -75,8 +76,11 @@ class REINFORCE:
     # self.probs = []
     # self.rewards = []
 
+    print(self.probs)
     log_probs = torch.stack(self.probs)
     loss = -torch.mean(log_probs) * (sum(self.rewards) - 15)
+    print("HIHIHIHIHI", loss)
+    breakpoint()
     self.optimizer.zero_grad()
     loss.backward()
     self.optimizer.step()
