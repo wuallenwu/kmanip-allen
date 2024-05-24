@@ -3,6 +3,7 @@
 from collections import OrderedDict
 import random
 import time
+import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,21 +13,28 @@ from torch.distributions.normal import Normal
 
 import gymnasium as gym
 import gym_kmanip
+from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+
+total_num_episodes = int(5e4)  # Total number of episodes
+training_period = total_num_episodes/5
+update_period = 1e3
+obs_space_dims, action_space_dims = 23, 7 #23 observation space dims since we don't care about cube orientation
+
+plt.rcParams["figure.figsize"] = (10, 5)
+torch.set_printoptions(precision=8)
+
 # choose your environment
-# ENV_NAME: str = "KManipSoloArm"
-ENV_NAME: str = "KManipSoloArmQPos"
+ENV_NAME: str = "KManipSoloArm"
+# ENV_NAME: str = "KManipSoloArmQPos"
 # ENV_NAME: str = "KManipSoloArmVision"
 # ENV_NAME: str = "KManipDualArm"
 # ENV_NAME: str = "KManipDualArmVision"
 # ENV_NAME: str = "KManipTorso"
 # ENV_NAME: str = "KManipTorsoVision"
 env = gym.make(ENV_NAME)
-
-total_num_episodes = int(5e4)  # Total number of episodes
-obs_space_dims, action_space_dims = 23, 11 #23 observation space dims since we don't care about cube orientation
-
-plt.rcParams["figure.figsize"] = (10, 5)
-torch.set_printoptions(precision=8)
+env = RecordVideo(env, video_folder="SoloArmAgent", name_prefix="training",
+                  episode_trigger=lambda x: x % training_period == 0)
+# env = RecordEpisodeStatistics(env)
 
 class Policy_Network(nn.Module):
     """Parametrized Policy Network."""
@@ -94,7 +102,7 @@ class REINFORCE:
         """
 
         # Hyperparameters
-        self.learning_rate = 1e-4  # Learning rate for policy optimization
+        self.learning_rate = 3e-4  # Learning rate for policy optimization
         self.gamma = 0.99  # Discount factor
         self.eps = 1e-6   # small number for mathematical stability
 
@@ -114,6 +122,10 @@ class REINFORCE:
             action: Action to be performed
         """
         flattened = np.concatenate(list(state.values()))
+        for f in flattened:
+            if abs(f) > 1:
+                print("invalid observation" + flattened)
+                breakpoint()
         flattened = flattened[:23]
         state = torch.tensor(flattened, dtype=torch.float64)
         action_means, action_stddevs = self.net(state)
@@ -127,12 +139,19 @@ class REINFORCE:
         actions = torch.tensor([action.item() for action in actions], dtype = torch.float64)
         self.probs.append(log_prob_sum)
         actions = actions.numpy()
+        #minmax scale
+        actions = ((actions - np.min(actions)) / (np.max(actions) - np.min(actions))) * 2 - 1
+        #make sure all actions in range
+        for a in actions:
+            if abs(a) > 1:
+                print("invalid observation" + actions)
+                breakpoint()
 
-        keys = ["grip_r", "q_pos"]
-        vals = [actions[:1], actions[1:]]
+        keys = ["eer_pos", "eer_orn", "grip_r"]
+        vals = [np.array(actions[:3:]), np.array(actions[3:6:]), np.array(actions[6])]
 
         actiondict = OrderedDict()
-        for i in range (2):
+        for i in range (3):
             actiondict[keys[i]] = vals[i]
         return actiondict
 
@@ -160,7 +179,8 @@ class REINFORCE:
         # for name, param in self.net.named_parameters():
           
         # print('Grad Sum', torch.sum([torch.norm(param.grad) ])
-        nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
+        # gnorm = nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
+        # print(gnorm)
         
 
         self.optimizer.step()
@@ -180,8 +200,8 @@ for seed in [0]:
     # Reinitialize agent every seed
     agent = REINFORCE(obs_space_dims, action_space_dims)
     reward_over_episodes = []
-
-    for episode in range(total_num_episodes):
+    touches = 0
+    for episode in range(total_num_episodes + 1):
         start_time = time.time()
         # gymnasium v26 requires users to set seed while resetting the environment
         obs, _ = env.reset(seed=seed)
@@ -190,15 +210,19 @@ for seed in [0]:
         # breakpoint()
         done = False
         rewards = []
-        
+        signal = False
         while not done:
             action = agent.sample_action(obs)
             # Step return type - `tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]`
             # These represent the next observation, the reward from the step,
             # if the episode is terminated, if the episode is truncated and
             # additional info from the step
-            obs, reward, terminated, truncated, _ = env.step(action)
-
+            obs, reward, terminated, truncated, info = env.step(action)
+            if reward > 50:
+                touches += 1
+                # print("touch signal sent")
+                # signal = True
+                # breakpoint()
             rewards.append(reward)
             agent.rewards.append(reward)
 
@@ -207,9 +231,17 @@ for seed in [0]:
             #  - terminated: Any of the state space values is no longer finite.
             done = terminated or truncated 
         agent.update()
+        # if(signal == True):
+            # print(rewards)
+            # breakpoint()
         reward_over_episodes.append(np.average(rewards))
-        if episode % 100 == 0:
-            print("Episode:", episode, "Average Reward:", np.average(rewards))
+        if episode == 0:
+            print ("0th Episode", reward_over_episodes[0])
+        if episode % update_period == 0 and episode != 0:
+            print("Episode:", episode, "Average Reward:", np.average(reward_over_episodes[episode-update_period:episode]), "Total Touches over", int(update_period), "episodes:", touches)
+            touches = 0
+        logging.info(f"episode-{episode}", info["episode"]) 
+    env.close()
 
 #display learning over episodes
 xs = [x for x in range(len(reward_over_episodes))]

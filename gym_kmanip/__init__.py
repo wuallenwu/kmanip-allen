@@ -163,8 +163,13 @@ CAMERAS["grip_l"] = Cam(60, 40, 3, 45, (30, 20), "grip_l", "camera/grip_l")
 # cube is randomly spawned on episode start
 CUBE_SPAWN_RANGE: NDArray = np.array(
     [
-        [0.1, 0.3],  # X
-        [0.5, 0.7],  # Y
+        # [0.1, 0.3],  # X
+        # [0.5, 0.7],  # Y
+        # [0.6, 0.7],  # Z
+
+        #spawn farther
+        [0.1, 0.2],  # X
+        [0.45, 0.75],  # Y
         [0.6, 0.7],  # Z
     ]
 )
