@@ -13,11 +13,11 @@ from torch.distributions.normal import Normal
 
 import gymnasium as gym
 import gym_kmanip
-from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+from gymnasium.wrappers import RecordVideo
 
 total_num_episodes = int(5e4)  # Total number of episodes
-training_period = total_num_episodes/5
-update_period = 1e3
+training_period = total_num_episodes / 10
+update_period = int(5e2)
 obs_space_dims, action_space_dims = 23, 7 #23 observation space dims since we don't care about cube orientation
 
 plt.rcParams["figure.figsize"] = (10, 5)
@@ -50,7 +50,7 @@ class Policy_Network(nn.Module):
         super().__init__()
 
         hidden_space1 = 16  
-        hidden_space2 = 16  
+        hidden_space2 = 32  
 
         # Shared Network
         self.shared_net = nn.Sequential(
@@ -103,7 +103,7 @@ class REINFORCE:
 
         # Hyperparameters
         self.learning_rate = 3e-4  # Learning rate for policy optimization
-        self.gamma = 0.99  # Discount factor
+        self.gamma = 0.999  # Discount factor
         self.eps = 1e-6   # small number for mathematical stability
 
         self.probs = []  # Stores probability values of the sampled action
@@ -134,17 +134,20 @@ class REINFORCE:
         # mean and standard deviation and sample an action
         distribs = [Normal(action_means[i] + self.eps, action_stddevs[i] + self.eps) for i in range(len(action_means))]
         actions = [(distrib.sample()) for distrib in distribs]
+
+        #find log probability of taking the action
         log_probs = [distribs[i].log_prob(actions[i]) for i in range(len(distribs))]
         log_prob_sum = torch.sum(torch.stack(log_probs))
-        actions = torch.tensor([action.item() for action in actions], dtype = torch.float64)
         self.probs.append(log_prob_sum)
+
+        actions = torch.tensor([action.item() for action in actions], dtype = torch.float64)
         actions = actions.numpy()
         #minmax scale
-        actions = ((actions - np.min(actions)) / (np.max(actions) - np.min(actions))) * 2 - 1
+        actions = actions / (max(abs(np.min(actions)), abs(np.max(actions))))
         #make sure all actions in range
         for a in actions:
             if abs(a) > 1:
-                print("invalid observation" + actions)
+                print("invalid action" + actions)
                 breakpoint()
 
         keys = ["eer_pos", "eer_orn", "grip_r"]
@@ -236,8 +239,10 @@ for seed in [0]:
             # breakpoint()
         reward_over_episodes.append(np.average(rewards))
         if episode == 0:
-            print ("0th Episode", reward_over_episodes[0])
+            print ("Episode 0", reward_over_episodes[0])
         if episode % update_period == 0 and episode != 0:
+            # print(episode)
+            # print(episode - update_period)
             print("Episode:", episode, "Average Reward:", np.average(reward_over_episodes[episode-update_period:episode]), "Total Touches over", int(update_period), "episodes:", touches)
             touches = 0
         logging.info(f"episode-{episode}", info["episode"]) 
