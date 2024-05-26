@@ -16,6 +16,8 @@ uses scipy least squares
 https://docs.scipy.org/doc/scipy-1.13.0/reference/generated/scipy.optimize.least_squares.html
 """
 
+#Turn IK time and infeasible messages on and off
+UPDATES = False
 
 def ik_res(
     q_pos: NDArray,
@@ -135,7 +137,8 @@ def ik(
         )
         q_pos = result.x
     except ValueError as e:
-        print(f"IK failed: {e}")
+        if UPDATES:
+            print(f"IK failed: {e}")
     # clip to joint velocity limits
     np.clip(
         q_pos,
@@ -151,5 +154,6 @@ def ik(
         out=q_pos,
     )
     total_time = time.time() - start_time
-    print(f"IK took {total_time*1000}ms")
+    if UPDATES:
+        print(f"IK took {total_time*1000}ms")
     return q_pos

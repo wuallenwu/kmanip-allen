@@ -25,7 +25,7 @@ DUAL_ARM_URDF: str = "stompy_dual_arm_tiny_glb.urdf"
 TORSO_URDF: str = "stompy_tiny_glb/robot.urdf"
 
 # Misc
-MAX_EPISODE_STEPS: int = 30
+MAX_EPISODE_STEPS: int = 64
 FPS: int = 10
 CONTROL_TIMESTEP: float = 0.02  # ms
 MAX_Q_VEL: float = np.pi  # rad/s
@@ -168,9 +168,9 @@ CUBE_SPAWN_RANGE: NDArray = np.array(
         # [0.6, 0.7],  # Z
 
         #spawn farther
-        [0.1, 0.2],  # X
-        [0.45, 0.75],  # Y
-        [0.6, 0.7],  # Z
+        [0.1, 0.25],  # X
+        [0, 0.7],  # Y
+        [0.535, 0.55],  # Z
     ]
 )
 
@@ -214,9 +214,9 @@ EE_S_DELTA: float = 0.0001
 
 # reward shaping for onearm touching block
 REWARD_SUCCESS_THRESHOLD: float = 2.0
-REWARD_VEL_PENALTY: float = 0.001
-REWARD_GRIP_DIST: float = 0.01
-REWARD_TOUCH_CUBE: float = 1e9
+REWARD_VEL_PENALTY: float = 0.0
+REWARD_GRIP_DIST: float = 1.0
+REWARD_TOUCH_CUBE: float = 100.0
 REWARD_LIFT_CUBE: float = 0.0
 
 # MuJoCo and Scipy/Rerun use different quaternion conventions

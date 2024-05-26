@@ -1,4 +1,4 @@
-# WIP - REINFORCE for one arm touching block
+# REINFORCE for one arm touching block
 
 from collections import OrderedDict
 import random
@@ -93,8 +93,7 @@ class REINFORCE:
     """REINFORCE algorithm."""
 
     def __init__(self, obs_space_dims: int, action_space_dims: int):
-        """Initializes an agent that learns a policy via REINFORCE algorithm [1]
-        to solve the task at hand (Inverted Pendulum v4).
+        """Initializes an agent that learns a policy via REINFORCE algorithm
 
         Args:
             obs_space_dims: Dimension of the observation space
@@ -167,34 +166,32 @@ class REINFORCE:
         for R in self.rewards[::-1]:
             running_g = R + self.gamma * running_g
             gs.insert(0, running_g)
-
         deltas = torch.tensor(gs)
-        # print(deltas[0])
-
         loss = 0
-        # minimize -1 * prob * reward obtained
+
+        # minimize LOSS: -1 * prob * reward obtained
         for log_prob, delta in zip(self.probs, deltas, strict = True):
             loss += log_prob * delta * (-1)
-        # print(loss)
+
         # Update the policy network
         self.optimizer.zero_grad()
         loss.backward()
+
+        # DEBUG gradients
         # for name, param in self.net.named_parameters():
-          
         # print('Grad Sum', torch.sum([torch.norm(param.grad) ])
         # gnorm = nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1)
         # print(gnorm)
         
 
         self.optimizer.step()
-
         # Empty / zero out all episode-centric/related variables
         self.probs = []
         self.rewards = []
 
 rewards_over_seeds = []
 
-for seed in [0]:  
+for seed in [0, 3, 5]:  
     # set seed
     torch.manual_seed(seed)
     random.seed(seed)
@@ -206,14 +203,12 @@ for seed in [0]:
     touches = 0
     for episode in range(total_num_episodes + 1):
         start_time = time.time()
-        # gymnasium v26 requires users to set seed while resetting the environment
+        # set random seed for consistent tests
         obs, _ = env.reset(seed=seed)
-        # print(obs)
-        # print(env.observation_space)
-        # breakpoint()
         done = False
         rewards = []
         signal = False
+
         while not done:
             action = agent.sample_action(obs)
             # Step return type - `tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]`
@@ -233,6 +228,7 @@ for seed in [0]:
             #  - truncated: The episode duration reaches max number of timesteps
             #  - terminated: Any of the state space values is no longer finite.
             done = terminated or truncated 
+
         agent.update()
         # if(signal == True):
             # print(rewards)
@@ -241,8 +237,6 @@ for seed in [0]:
         if episode == 0:
             print ("Episode 0", reward_over_episodes[0])
         if episode % update_period == 0 and episode != 0:
-            # print(episode)
-            # print(episode - update_period)
             print("Episode:", episode, "Average Reward:", np.average(reward_over_episodes[episode-update_period:episode]), "Total Touches over", int(update_period), "episodes:", touches)
             touches = 0
         logging.info(f"episode-{episode}", info["episode"]) 
