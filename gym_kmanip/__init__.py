@@ -26,7 +26,7 @@ TORSO_URDF: str = "stompy_tiny_glb/robot.urdf"
 
 # Misc
 MAX_EPISODE_STEPS: int = 64
-FPS: int = 10
+FPS: int = 30
 CONTROL_TIMESTEP: float = 0.02  # ms
 MAX_Q_VEL: float = np.pi  # rad/s
 
